@@ -11,7 +11,7 @@ def initialize_firestore():
     """
     try:
         # Replace "path/to/your/serviceAccountKey.json" with the path to your service account key file.
-        cred = credentials.Certificate("/Users/zhaosongzhu/Downloads/financial-app-d3ac9-firebase-adminsdk-fbsvc-2394db1dd3.json")
+        cred = credentials.Certificate("/path/to/your/serviceAccountKey.json")
         firebase_admin.initialize_app(cred)
         db = firestore.client()
         print("Successfully connected to Firestore!")
