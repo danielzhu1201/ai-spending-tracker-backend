@@ -1,6 +1,7 @@
 import base64
 import io
 import os
+from datetime import datetime, time, timedelta
 from flask import Flask, g, request, jsonify
 import firebase_admin
 from firebase_admin import auth, credentials, firestore
@@ -149,12 +150,82 @@ def get_transactions():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {e}"}), 500
 
+@app.route('/summary/spending', methods=['GET'])
+def get_spending_summary():
+    """
+    Calculates spending summary by category for the authenticated user
+    for a specified period (daily, weekly, monthly).
+    """
+    if not db:
+        return jsonify({"error": "Firestore is not initialized."}), 500
+
+    try:
+        user_id = g.user['uid']
+        period = request.args.get('period', 'monthly').lower()
+
+        if period not in ['daily', 'weekly', 'monthly']:
+            return jsonify({"error": "Invalid period. Supported values are 'daily', 'weekly', 'monthly'."}), 400
+
+        now = datetime.now()
+        if period == 'daily':
+            start_date = datetime.combine(now.date(), time.min)
+        elif period == 'weekly':
+            start_of_week = now.date() - timedelta(days=now.weekday())
+            start_date = datetime.combine(start_of_week, time.min)
+        else:  # monthly
+            start_of_month = now.date().replace(day=1)
+            start_date = datetime.combine(start_of_month, time.min)
+
+        # Query for transactions belonging to the user within the period
+        trans_ref = db.collection('transactions')
+        query = trans_ref.where('userId', '==', user_id).where('date', '>=', start_date)
+        docs_stream = query.stream()
+
+        spending_by_category = {}
+        total_spent = 0
+        for doc in docs_stream:
+            transaction = doc.to_dict()
+            category = transaction.get('category', 'Other')
+            amount = transaction.get('amount', 0)
+
+            if isinstance(amount, (int, float)):
+                spending_by_category[category] = spending_by_category.get(category, 0) + amount
+                total_spent += amount
+
+        if not spending_by_category:
+            return jsonify({"message": f"No transactions found for user {user_id} in the '{period}' period."}), 404
+
+        # Sort categories by total spending in descending order
+        sorted_summary = sorted(
+            [{"category": k, "total_amount": v} for k, v in spending_by_category.items()],
+            key=lambda x: x['total_amount'],
+            reverse=True
+        )
+
+        result = {
+            "period": period,
+            "totalSpent": total_spent,
+            "topCategories": sorted_summary
+        }
+
+        prompt = "Based on the spending summary, provide a concise analysis of the user's spending habits. Include insights on top spending categories and any notable trends." + str(result)
+        
+        response = model.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17", contents=[prompt]
+        )
+
+        result['insights'] = response.text
+
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {e}"}), 500
+
 @app.route('/transactions', methods=['POST'])
 def create_transaction():
     """
     Creates a new transaction for the authenticated user.
     Expects 'merchantName', 'amount', 'category', and 'date' in the JSON body.
-    The 'userId' and 'createdAt' fields are automatically added.
+    The 'userId' and 'createdAt' fields are automatically added. The 'date' should be in 'YYYY-MM-DD' format.
     """
     if not db:
         return jsonify({"error": "Firestore is not initialized."}), 500
@@ -167,6 +238,12 @@ def create_transaction():
             if field not in data:
                 return jsonify({"error": f"Missing required field: {field}"}), 400
 
+        # Convert date string (e.g., 'YYYY-MM-DD') to a datetime object for proper querying
+        try:
+            transaction_date = datetime.strptime(data['date'], '%Y-%m-%d')
+        except ValueError:
+            return jsonify({"error": "Invalid date format. Please use YYYY-MM-DD."}), 400
+
         user_id = g.user['uid']
 
         transaction_data = {
@@ -174,7 +251,7 @@ def create_transaction():
             'merchantName': data['merchantName'],
             'amount': data['amount'],
             'category': data['category'],
-            'date': data['date'],
+            'date': transaction_date,
             'createdAt': firestore.SERVER_TIMESTAMP
         }
 
@@ -183,22 +260,6 @@ def create_transaction():
         return jsonify({"message": "Transaction created successfully", "id": doc_ref.id}), 201
     except Exception as e:
         return jsonify({"error": f"An error occurred while creating transaction: {e}"}), 500
-
-@app.route('/generate', methods=['POST'])
-def generate_text():
-    """
-    Generates text content using the Gemini AI model based on a given prompt.
-    Expects a 'prompt' in the JSON body.
-    """
-    try:
-        data = request.get_json()
-        prompt = data['prompt']
-        response = model.models.generate_content(
-            model="gemini-2.5-flash-lite-preview-06-17", contents=prompt
-        )
-        return jsonify({"response": response.text})
-    except Exception as e:
-        return jsonify({"error": f"An error occurred while generating content: {e}"}), 500
 
 @app.route('/receipt', methods=['POST'])
 def receipt_scan():
