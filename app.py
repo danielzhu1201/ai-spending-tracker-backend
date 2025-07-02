@@ -1,9 +1,9 @@
 import base64
 import io
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, g, request, jsonify
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import auth, credentials, firestore
 from google import genai
 from PIL import Image
 
@@ -32,6 +32,24 @@ except Exception as e:
     print(f"Error during initialization: {e}")
     db = None
     model = None
+
+# --- Authentication Middleware ---
+
+@app.before_request
+def verify_token():
+    # Skip token verification for the healthcheck endpoint
+    if request.path == '/healthcheck':
+        return
+
+    auth_header = request.headers.get('Authorization')
+    if not auth_header or not auth_header.startswith('Bearer '):
+        return jsonify({"error": "Authorization header with Bearer token is required"}), 401
+
+    id_token = auth_header.split('Bearer ')[1]
+    try:
+        g.user = auth.verify_id_token(id_token)
+    except (auth.InvalidIdTokenError, ValueError) as e:
+        return jsonify({"error": f"Invalid or expired token: {e}"}), 401
 
 # --- API Endpoints ---
 
