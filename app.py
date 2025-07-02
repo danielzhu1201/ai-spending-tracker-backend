@@ -116,6 +116,69 @@ def create_user():
     except Exception as e:
         return jsonify({"error": f"An error occurred while creating user: {e}"}), 500
 
+@app.route('/transactions', methods=['GET'])
+def get_transactions():
+    """
+    Fetches all transactions for the authenticated user from Firestore.
+    """
+    if not db:
+        return jsonify({"error": "Firestore is not initialized."}), 500
+
+    try:
+        user_id = g.user['uid']
+
+        # Query for transactions belonging to the user
+        trans_ref = db.collection('transactions').where('userId', '==', user_id)
+        docs_stream = trans_ref.stream()
+
+        documents = []
+        for doc in docs_stream:
+            doc_data = doc.to_dict()
+            doc_data['id'] = doc.id
+            documents.append(doc_data)
+
+        if not documents:
+            return jsonify({"message": f"No transactions found for user {user_id}."}), 404
+
+        return jsonify(documents), 200
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {e}"}), 500
+
+@app.route('/transactions', methods=['POST'])
+def create_transaction():
+    """
+    Creates a new transaction for the authenticated user.
+    Expects 'merchantName', 'amount', 'category', and 'date' in the JSON body.
+    The 'userId' and 'createdAt' fields are automatically added.
+    """
+    if not db:
+        return jsonify({"error": "Firestore is not initialized."}), 500
+
+    try:
+        data = request.get_json()
+        print(f"Received data for transaction creation: {data}")
+        required_fields = ['amount', 'category', 'date', 'merchantName']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        user_id = g.user['uid']
+
+        transaction_data = {
+            'userId': user_id,
+            'merchantName': data['merchantName'],
+            'amount': data['amount'],
+            'category': data['category'],
+            'date': data['date'],
+            'createdAt': firestore.SERVER_TIMESTAMP
+        }
+
+        # Add a new doc with a generated ID and return its ID
+        update_time, doc_ref = db.collection('transactions').add(transaction_data)
+        return jsonify({"message": "Transaction created successfully", "id": doc_ref.id}), 201
+    except Exception as e:
+        return jsonify({"error": f"An error occurred while creating transaction: {e}"}), 500
+
 @app.route('/generate', methods=['POST'])
 def generate_text():
     """
