@@ -9,6 +9,11 @@ from PIL import Image
 
 app = Flask(__name__)
 
+SPENDING_CATEGORIES = [
+    "Food & Dining", "Shopping", "Transportation", "Health & Fitness",
+    "Entertainment", "Utilities", "Travel", "Other"
+]
+
 # --- Google Services Init ---
 
 try:
@@ -195,15 +200,15 @@ def generate_text():
     except Exception as e:
         return jsonify({"error": f"An error occurred while generating content: {e}"}), 500
 
-@app.route('/understand-image', methods=['POST'])
-def understand_image():
+@app.route('/receipt', methods=['POST'])
+def receipt_scan():
     """
     Analyzes an image with a given prompt using the Gemini AI model.
-    Expects a 'prompt' and a base64-encoded 'image_data' in the JSON body.
+    Expects a base64-encoded 'image_data' in the JSON body.
     """
     try:
         data = request.get_json()
-        prompt = data['prompt']
+        prompt = "Scan this receipt. Based on the entire receipt, provide me in JSON format the below information: date(mm/dd/yyyy), merchant name, category(only one category based on the merchant, must select from " + ", ".join(SPENDING_CATEGORIES) + "), amount(total amount in the receipt). If the receipt is not valid, return an empty JSON object. "
         image_data = data['image_data']
         try:
             image_data = base64.b64decode(image_data)
