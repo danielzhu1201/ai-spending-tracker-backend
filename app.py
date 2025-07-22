@@ -10,7 +10,7 @@ from google import genai
 from PIL import Image
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True, allow_headers=['Content-Type', 'Authorization'])
 
 SPENDING_CATEGORIES = [
     "Food & Dining", "Shopping", "Transportation", "Health & Fitness",
