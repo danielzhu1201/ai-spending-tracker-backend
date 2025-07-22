@@ -3,12 +3,14 @@ import io
 import os
 from datetime import datetime, time, timedelta
 from flask import Flask, g, request, jsonify
+from flask_cors import CORS
 import firebase_admin
 from firebase_admin import auth, credentials, firestore
 from google import genai
 from PIL import Image
 
 app = Flask(__name__)
+CORS(app)
 
 SPENDING_CATEGORIES = [
     "Food & Dining", "Shopping", "Transportation", "Health & Fitness",
@@ -269,7 +271,7 @@ def receipt_scan():
     """
     try:
         data = request.get_json()
-        prompt = "Scan this receipt. Based on the entire receipt, provide me in JSON format the below information: date(mm/dd/yyyy), merchant name, category(only one category based on the merchant, must select from " + ", ".join(SPENDING_CATEGORIES) + "), amount(total amount in the receipt). If the receipt is not valid, return an empty JSON object. "
+        prompt = "Scan this receipt. Based on the entire receipt, provide me in JSON format the below information: date(yyyy-MM-dd), merchantName, category(only one category based on the merchant, must select from " + ", ".join(SPENDING_CATEGORIES) + "), amount(total amount in the receipt). If the receipt is not valid, return an empty JSON object. "
         image_data = data['image_data']
         try:
             image_data = base64.b64decode(image_data)
