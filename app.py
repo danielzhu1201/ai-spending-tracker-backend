@@ -71,7 +71,7 @@ except Exception as e:
 @app.before_request
 def verify_token():
     # Skip token verification for the healthcheck endpoint
-    if request.path == '/healthcheck':
+    if request.path == '/healthcheck' or request.method == 'OPTIONS':
         return
 
     auth_header = request.headers.get('Authorization')
