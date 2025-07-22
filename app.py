@@ -20,10 +20,30 @@ SPENDING_CATEGORIES = [
 # --- Google Services Init ---
 
 try:
-    FIREBASE_CONFIG_DIR = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    cred = credentials.Certificate(FIREBASE_CONFIG_DIR)
+    # Construct Firebase credentials from environment variables.
+    # This is useful for environments like containers or serverless where file paths can be tricky.
+    firebase_creds = {
+        "type": "service_account",
+        "project_id": os.environ.get("FIREBASE_PROJECT_ID"),
+        "private_key_id": os.environ.get("FIREBASE_PRIVATE_KEY_ID"),
+        # The private key must be passed with newlines escaped (e.g., in a .env file)
+        "private_key": os.environ.get("FIREBASE_PRIVATE_KEY", "").replace('\\n', '\n'),
+        "client_email": os.environ.get("FIREBASE_CLIENT_EMAIL"),
+        "client_id": os.environ.get("FIREBASE_CLIENT_ID"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_x509_cert_url": os.environ.get("FIREBASE_CLIENT_X509_CERT_URL")
+    }
+
+    # Check if all required environment variables for Firebase are set
+    required_firebase_vars = ["FIREBASE_PROJECT_ID", "FIREBASE_PRIVATE_KEY_ID", "FIREBASE_PRIVATE_KEY", "FIREBASE_CLIENT_EMAIL", "FIREBASE_CLIENT_ID", "FIREBASE_CLIENT_X509_CERT_URL"]
+    if not all(os.environ.get(var) for var in required_firebase_vars):
+        raise ValueError("One or more required Firebase environment variables are not set.")
+
+    cred = credentials.Certificate(firebase_creds)
     firebase_admin.initialize_app(cred)
-    
+
     # Initialize Firestore DB
     db = firestore.client()
     print("Successfully connected to Firestore!")
