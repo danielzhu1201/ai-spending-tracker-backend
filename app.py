@@ -10,7 +10,12 @@ from google import genai
 from PIL import Image
 
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app,
+    origins=["https://ai-spending-tracker.onrender.com"], 
+    supports_credentials=True,
+    allow_headers=['Content-Type', 'Authorization']
+)
 
 SPENDING_CATEGORIES = [
     "Food & Dining", "Shopping", "Transportation", "Health & Fitness",
@@ -66,7 +71,7 @@ except Exception as e:
 @app.before_request
 def verify_token():
     # Skip token verification for the healthcheck endpoint
-    if request.path == '/healthcheck':
+    if request.path == '/healthcheck' or request.method == 'OPTIONS':
         return
 
     auth_header = request.headers.get('Authorization')
